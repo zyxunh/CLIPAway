@@ -1,10 +1,15 @@
 import argparse
 import os
+
+import PIL.Image
 from omegaconf import OmegaConf
 import torch
 from torchvision.transforms import ToPILImage
 from torch.utils.data import DataLoader
 from diffusers import StableDiffusionInpaintPipeline
+from unhcv.common.utils import attach_home_root
+from unhcv.projects.diffusion.inpainting.evaluation.evaluation_model import init_inpainting_eval_dataset
+
 from dataset.dataset import TestDataset
 from model.clip_away import CLIPAway
 from PIL import Image, ImageDraw, ImageFont
@@ -13,6 +18,12 @@ from PIL import Image, ImageDraw, ImageFont
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default="config/inference_config.yaml")
+    parser.add_argument(
+        '--show_root', type=str, default='show/compare/clipaway')
+    parser.add_argument(
+        '--data_indexes_path', type=str, default=None)
+    parser.add_argument(
+        '--show', action="store_true")
     return parser.parse_args()
 
 
@@ -35,7 +46,7 @@ def generate_focused_embeddings_grid(image, mask, fg_focused, bg_focused, projec
     return row_image
 
 
-def main(config):
+def main(config, args):
     device = "cuda" if torch.cuda.is_available() and config.device == "cuda" else "cpu"
     print(f"Using device: {device}")
     
@@ -54,16 +65,22 @@ def main(config):
         num_tokens=4
     )
 
-    test_dataset = TestDataset(config.root_path)
-    test_dataloader = DataLoader(test_dataset, shuffle=False, batch_size=1)
+    # test_dataset = TestDataset(config.root_path)
+    # test_dataloader = DataLoader(test_dataset, shuffle=False, batch_size=1)
+    test_dataloader = init_inpainting_eval_dataset(preprocess=False, data_indexes_path=args.data_indexes_path)
     
     # latent sizes are given according to StableDiffusionInpaintPipeline
     latents = torch.randn((1,4,64,64), generator=torch.Generator().manual_seed(config.seed)).to(device)
 
-    for batch in test_dataloader:
-        image, mask, image_paths = batch["image"], batch["mask"], batch["image_path"]
-        image_pil = [ToPILImage()(img) for img in image]
-        mask_pil = [ToPILImage()(img) for img in mask]
+    for i_batch, batch in enumerate(test_dataloader):
+        original_image_size = batch['image'].size
+        image_pil = [batch['image'].resize((512, 512), resample=PIL.Image.BICUBIC).convert("RGB")]
+        mask_pil = [batch['inpainting_mask'].resize((512, 512), resample=PIL.Image.NEAREST)]
+
+        # image, mask, image_paths = batch["image"], batch["mask"], batch["image_path"]
+        # image_pil = [ToPILImage()(img) for img in image]
+        # mask_pil = [ToPILImage()(img) for img in mask]
+        # del image, mask
 
         final_image = clipaway.generate(
             prompt=[""], scale=config.scale, seed=config.seed,
@@ -97,12 +114,14 @@ def main(config):
             final_image = generate_focused_embeddings_grid(
                 image_pil[0], mask_pil[0], fg_image, bg_image, proj_image, final_image
             )
-        
-        final_image.save(f"{config.save_path_prefix}/{os.path.basename(image_paths[0])}")
+
+        final_image = final_image.resize(original_image_size, resample=PIL.Image.BICUBIC)
+        final_image.save(f"{config.save_path_prefix}/{i_batch}.jpg")
 
 
 if __name__ == "__main__":
     args = parse_args()
     config = OmegaConf.load(args.config)
+    config.save_path_prefix = attach_home_root(args.show_root)
     os.makedirs(config.save_path_prefix, exist_ok=True)
-    main(config)
+    main(config, args)

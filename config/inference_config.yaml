@@ -4,13 +4,13 @@ image_encoder_path: ckpts/IPAdapter/image_encoder
 alpha_clip_ckpt_pth: ckpts/AlphaCLIP/clip_l14_grit+mim_fultune_6xe.pth
 alpha_clip_id: ViT-L/14
 ip_adapter_ckpt_path: ckpts/IPAdapter/ip-adapter_sd15.bin
-sd_model_key: "botp/stable-diffusion-v1-5-inpainting"
+sd_model_key: "/home/yixing/model/stable-diffusion-v1-5-inpainting"
 number_of_hidden_layers: 6
 alpha_clip_embed_dim: 768
 ip_adapter_embed_dim: 1024
 mlp_projection_layer_ckpt_path: ckpts/CLIPAway/model.safetensors
-save_path_prefix: test/results
+save_path_prefix: /home/yixing/show/clipaway/gradio_1
 seed: 42
 scale: 1
 strength: 1
-display_focused_embeds: True
+display_focused_embeds: False
